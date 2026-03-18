@@ -270,7 +270,6 @@ To tune criteria, edit `REACTION_KEYWORDS` and `MUST_INCLUDE_KEYWORDS` in **`uti
 
 - **Whisper accuracy with children's voices:** Amelia's voice is occasionally mis-transcribed when she speaks quickly or over game audio. Good enough for highlight detection; may need light editing for publication.
 - **Subtitle burn requires libass:** If `ffmpeg` is built without `libass`, burning fails gracefully — the raw clip is saved and a warning is printed. The `.srt` is always saved.
-- **medium model OOM:** The `medium` Whisper model (~1.4 GB) caused out-of-memory errors on this machine. Use `small` unless on a machine with more RAM.
 - **Language fixed to Chinese:** The script forces `language="zh"`. For sessions with more English, switch to `language=None` for auto-detection (edit `utils.py → transcribe()`).
 - **Fast-seek thumbnails:** `preprocess.py` uses FFmpeg fast-seek (`-ss` before `-i`) for thumbnail extraction, so the frame may be up to a few seconds off from the exact peak timestamp. This is intentional — keyframe accuracy is sufficient for AI review thumbnails.
 
@@ -280,22 +279,19 @@ To tune criteria, edit `REACTION_KEYWORDS` and `MUST_INCLUDE_KEYWORDS` in **`uti
 
 ### Three-step pipeline (recommended)
 ```bash
-# 1. Record session → save as data/DayN/DayN.mp4
 
-# 2. Pre-process (~20 min with small model)
+# 1. Pre-process (~20 min with small model)
 python preprocess.py data/DayN/DayN.mp4
 
-# 3. AI review — give Claude:
+# 2. AI review — give Claude:
 #    - data/DayN/DayN_candidates/candidates.md
 #    - all candidate_*.jpg images
 #    - data/DayN/DayN.srt  (optional, for full context)
 #    Save Claude's output as data/DayN/highlights.md
 
-# 4. Post-process (cuts final clips, ~5 min)
+# 3. Post-process (cuts final clips, ~5 min)
 python postprocess.py data/DayN/DayN.mp4 data/DayN/highlights.md --srt data/DayN/DayN.srt
 
-# 5. Review clips in data/DayN/highlight/
-# 6. Post to Instagram Reels / YouTube Shorts
 ```
 
 ### Quick automated pass (no AI review)
