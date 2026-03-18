@@ -16,16 +16,16 @@ Usage:
     python3 highlight_extractor.py <video.mp4> [options]
 
 Options:
-    --clips N          Number of highlight clips to produce (default: 25)
+    --clips N          Number of highlight clips (default: unlimited; pass a number to limit)
     --min-gap N        Minimum seconds between clip centers (default: 15)
     --min-dur N        Minimum clip duration in seconds     (default: 10)
     --max-dur N        Maximum clip duration in seconds     (default: 60)
-    --model NAME       Whisper model: tiny / small / medium (default: small)
+    --model NAME       Whisper model: tiny / small / medium (default: medium)
     --no-burn          Skip subtitle burning (clips will still have .srt files)
 
 Examples:
     python3 highlight_extractor.py Day4.mp4
-    python3 highlight_extractor.py Day5.mp4 --clips 30 --model medium
+    python3 highlight_extractor.py Day5.mp4 --clips 20 --model small
 """
 
 import argparse
@@ -48,6 +48,14 @@ except ImportError:
     subprocess.run([sys.executable, "-m", "pip", "install", "openai-whisper",
                     "--break-system-packages", "-q"], check=True)
     import whisper
+
+try:
+    import opencc
+except ImportError:
+    print("Installing opencc-python-reimplemented...")
+    subprocess.run([sys.executable, "-m", "pip", "install", "opencc-python-reimplemented",
+                    "--break-system-packages", "-q"], check=True)
+    import opencc
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -106,8 +114,6 @@ REACTION_KEYWORDS = {
     "睡著":   2,
     "睡着":   2,
     "復活":   3,
-    "復活":   3,
-    "拜拜":   2,
 
     # ── Real-world intrusions (high interest!) ────────────────────────────────
     "地震":   6,
@@ -144,7 +150,7 @@ def extract_audio(video_path: str, audio_path: str):
 # ═══════════════════════════════════════════════════════════════════════════════
 # STEP 2 — Whisper transcription
 # ═══════════════════════════════════════════════════════════════════════════════
-def transcribe(audio_path: str, model_name: str = "small"):
+def transcribe(audio_path: str, model_name: str = "medium"):
     """Run Whisper and return the full result dict with segments."""
     print(f"  Loading Whisper '{model_name}' model...")
     model = whisper.load_model(model_name)
@@ -152,8 +158,9 @@ def transcribe(audio_path: str, model_name: str = "small"):
     result = model.transcribe(
         audio_path,
         verbose=False,
-        language="zh",          # Traditional Chinese
+        language="zh",
         task="transcribe",
+        initial_prompt="請使用繁體中文。以下是普通話對話。",  # nudge Whisper toward Traditional Chinese
     )
     return result
 
@@ -201,15 +208,17 @@ def compute_audio_scores(audio_path: str, duration: float) -> np.ndarray:
     Per-second excitement ratio based on RMS amplitude.
     Returns an array of shape (n_seconds,) where high values = loud/exciting moments.
     """
-    audio = np.fromfile(audio_path, dtype=np.float32)
+    audio_raw = np.fromfile(audio_path, dtype=np.int16)
+    audio = audio_raw.astype(np.float32) / 32768.0  # normalize int16 PCM to [-1.0, 1.0]
     sr = 16000
     n  = int(len(audio) / sr)
     rms = np.array([
         np.sqrt(np.mean(audio[i * sr:(i + 1) * sr] ** 2))
         for i in range(n)
     ])
-    # Smooth over 3 seconds
-    smoothed = np.convolve(rms, np.ones(3) / 3, mode="same")
+    # Smooth with 5-sample Gaussian kernel (reduces ringing at sharp transients)
+    kernel   = np.array([0.1, 0.25, 0.3, 0.25, 0.1])
+    smoothed = np.convolve(rms, kernel, mode="same")
     # Rolling 60-second median baseline
     baseline = np.array([
         np.median(smoothed[max(0, i - 30):i + 30])
@@ -328,22 +337,31 @@ def compute_clip_bounds(center: int,
     threshold = float(np.percentile(combined_scores, 60))  # "above average" activity
 
     # Walk backward to find natural start of moment
+    # Tolerates up to 1 consecutive below-threshold second to bridge brief dips
     back_limit = max(0, center - max_dur)
     start = center
+    consecutive_low = 0
     for t in range(center, back_limit, -1):
         if t < n and combined_scores[t] >= threshold:
             start = t
+            consecutive_low = 0
         else:
-            break
+            consecutive_low += 1
+            if consecutive_low > 1:
+                break
 
-    # Walk forward to find natural end of moment
+    # Walk forward to find natural end of moment (same dip tolerance)
     fwd_limit = min(n - 1, center + max_dur)
     end = center
+    consecutive_low = 0
     for t in range(center, fwd_limit):
         if t < n and combined_scores[t] >= threshold:
             end = t
+            consecutive_low = 0
         else:
-            break
+            consecutive_low += 1
+            if consecutive_low > 1:
+                break
 
     # Enforce minimum duration — pad symmetrically
     actual = end - start
@@ -451,12 +469,15 @@ def main():
     parser = argparse.ArgumentParser(
         description="Automated video highlight extractor with Traditional Chinese subtitle analysis"
     )
+    def _clips_arg(v):
+        return math.inf if v.lower() in ("inf", "unlimited", "0") else int(v)
+
     parser.add_argument("video",           help="Input MP4 file path")
-    parser.add_argument("--clips",         type=int,   default=25,      help="Number of highlight clips (default: 25)")
+    parser.add_argument("--clips",         type=_clips_arg, default=math.inf, help="Number of highlight clips (default: unlimited)")
     parser.add_argument("--min-gap",       type=int,   default=15,      help="Min seconds between clips (default: 15)")
     parser.add_argument("--min-dur",       type=int,   default=10,      help="Min clip duration in seconds (default: 10)")
     parser.add_argument("--max-dur",       type=int,   default=60,      help="Max clip duration in seconds (default: 60)")
-    parser.add_argument("--model",         default="small",             help="Whisper model: tiny/small/medium (default: small)")
+    parser.add_argument("--model",         default="medium",            help="Whisper model: tiny/small/medium (default: medium)")
     parser.add_argument("--no-burn",       action="store_true",         help="Skip subtitle burning into clips")
     args = parser.parse_args()
 
@@ -472,7 +493,8 @@ def main():
     print(f"\n{'='*60}")
     print(f"  🎬  Highlight Extractor")
     print(f"  Video   : {video_path.name}")
-    print(f"  Clips   : up to {args.clips}  |  Gap: {args.min_gap}s  |  Dur: {args.min_dur}–{args.max_dur}s")
+    clips_display = "unlimited" if args.clips == math.inf else str(int(args.clips))
+    print(f"  Clips   : {clips_display}  |  Gap: {args.min_gap}s  |  Dur: {args.min_dur}–{args.max_dur}s")
     print(f"  Model   : Whisper {args.model}")
     print(f"  Burn-in : {'No' if args.no_burn else 'Yes'}")
     print(f"{'='*60}\n")
@@ -487,7 +509,13 @@ def main():
     result   = transcribe(tmp_audio, args.model)
     segments = result["segments"]
     duration = segments[-1]["end"] if segments else 0
-    print(f"  ✓ {len(segments)} segments | {duration/60:.1f} min | Language: {result['language']}\n")
+    print(f"  ✓ {len(segments)} segments | {duration/60:.1f} min | Language: {result['language']}")
+
+    # Convert any Simplified Chinese characters to Traditional Chinese
+    converter = opencc.OpenCC("s2twp")
+    for seg in segments:
+        seg["text"] = converter.convert(seg["text"])
+    print("  ✓ Converted to Traditional Chinese (opencc s2twp)\n")
 
     # ── 3. Write full SRT ─────────────────────────────────────────────────────
     print("[3/5] Writing full subtitle file...")
