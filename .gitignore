@@ -1,0 +1,29 @@
+# ── Video files ───────────────────────────────────────────
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.webm
+
+# ── Audio files ───────────────────────────────────────────
+*.wav
+*.mp3
+*.aac
+*.f32
+
+# ── Subtitle files ────────────────────────────────────────
+*.srt
+*.vtt
+*.ass
+
+# ── Temp files created by the script ─────────────────────
+_tmp_*
+__pycache__/
+*.pyc
+*.pyo
+
+# ── Highlight output folder (clips are generated, not source)
+highlight/
+
+# ── macOS junk ────────────────────────────────────────────
+.DS_Store
