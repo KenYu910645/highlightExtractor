@@ -24,6 +24,9 @@ __pycache__/
 
 # ── Highlight output folder (clips are generated, not source)
 highlight/
+data/
+pretrained_models/
 
 # ── macOS junk ────────────────────────────────────────────
 .DS_Store
+.claude/
