@@ -49,14 +49,14 @@ Runs the full pipeline in one pass (transcribe → score → cut) without AI rev
 - **Recording length:** Typically 30–90 minutes per session
 - **File size:** Approximately 4 GB per session at 1080p 60fps
 
-### What makes a good highlight
+### What makes a good highlight (rank in priority)
 1. Amelia's verbal reactions — exclamations, laughter, funny commentary on enemies
 2. Dad and daughter talking to each other — teaching moments, baby-talk story explanations
 3. Dad saying something interesting or non-canonical about the game's lore
 4. Boss fight moments — especially named bosses
-5. Amelia discovering new game mechanics (swimming, grappling, stealth kills)
-6. Unexpected real-world events during the stream (earthquake, snacks, family members)
-7. Each highlight should be 10–60 seconds; extend for longer build-ups but never cut short
+5. Unexpected real-world events during the stream (earthquake, snacks, family members)
+7. Each highlight should be 3–30 seconds; You need to generate 10-30 clips, but the total amount of the clips time should be least then 5 mintues
+8. Slient scene is usually not a highlight
 
 ---
 
@@ -107,11 +107,11 @@ pip install openai-whisper numpy opencc-python-reimplemented --break-system-pack
 | Model  | Size   | Speed (60 min video) | Accuracy |
 |--------|--------|----------------------|----------|
 | tiny   | 75 MB  | ~5 min               | Basic    |
-| small  | 460 MB | ~20 min              | Good ✅  |
-| medium | 1.4 GB | ~50 min              | Better   |
+| small  | 460 MB | ~20 min              | Good     |
+| medium | 1.4 GB | ~50 min              | Better ✅ |
 
-`small` is the recommended default — handles Mandarin Chinese well and fits in available memory.
-`medium` caused out-of-memory issues on this machine — use `small` unless on a machine with more RAM.
+`medium` is the recommended default — best accuracy for Mandarin Chinese and children's voices.
+OOM issues previously observed with `medium` are resolved. Use `small` only if on a memory-constrained machine.
 
 ---
 
@@ -123,27 +123,27 @@ Transcribes the video, scores every second, picks the top N candidate moments, e
 ```bash
 python preprocess.py <video.mp4> [options]
 
-  --candidates N     Number of candidate moments to extract   (default: 50)
+  --candidates N     Number of candidate moments to extract   (default: 1000)
   --min-gap N        Min seconds between candidates           (default: 15)
-  --model NAME       Whisper model: tiny / small / medium     (default: small)
+  --model NAME       Whisper model: tiny / small / medium     (default: medium)
   --frame-size WxH   Thumbnail dimensions                     (default: 640x360)
 ```
 
 ### Examples
 ```bash
-# Standard run
+# Standard run (medium model, 1000 candidates)
 python preprocess.py data/Day5/Day5.mp4
 
 # Fewer candidates, faster
-python preprocess.py data/Day5/Day5.mp4 --candidates 20 --model tiny
+python preprocess.py data/Day5/Day5.mp4 --candidates 50 --model tiny
 
-# Higher accuracy
-python preprocess.py data/Day5/Day5.mp4 --model medium
+# Faster run with small model
+python preprocess.py data/Day5/Day5.mp4 --model small
 ```
 
 ### Output
 - `Day5.srt` — full transcription (Traditional Chinese, opencc converted)
-- `Day5_candidates/candidate_NN_MMmSSs.jpg` — 640×360 thumbnail per candidate
+- `Day5_candidates/candidate_NNN_MMmSSs.jpg` — 640×360 thumbnail per candidate
 - `Day5_candidates/candidates.md` — structured metadata for AI review
 
 ---

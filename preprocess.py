@@ -5,7 +5,7 @@ preprocess.py — Step 1: Transcribe video and extract highlight candidates
 Given an MP4 video, this script:
   1. Transcribes audio with OpenAI Whisper  → full .srt subtitle file
   2. Scores every second using audio RMS + Traditional Chinese subtitle analysis
-  3. Selects top N candidate highlight moments (generously, default 50)
+  3. Selects top N candidate highlight moments (generously, default 1000)
   4. Extracts a representative JPEG thumbnail for each candidate
   5. Writes candidates.md — a structured overview for AI review (Step 2)
 
@@ -13,9 +13,9 @@ Usage:
     python preprocess.py <video.mp4> [options]
 
 Options:
-    --candidates N     Number of candidate moments to extract (default: 50)
+    --candidates N     Number of candidate moments to extract (default: 1000)
     --min-gap N        Min seconds between candidates (default: 15)
-    --model NAME       Whisper model: tiny / small / medium (default: small)
+    --model NAME       Whisper model: tiny / small / medium (default: medium)
     --frame-size WxH   Thumbnail dimensions (default: 640x360)
 
 Output (next to the video file):
@@ -172,9 +172,9 @@ def main():
         description="Pre-process video: transcribe and extract highlight candidate thumbnails"
     )
     parser.add_argument("video",          help="Input MP4 file path")
-    parser.add_argument("--candidates",   type=int, default=50,      help="Number of candidate moments (default: 50)")
+    parser.add_argument("--candidates",   type=int, default=1000,    help="Number of candidate moments (default: 1000)")
     parser.add_argument("--min-gap",      type=int, default=15,      help="Min seconds between candidates (default: 15)")
-    parser.add_argument("--model",        default="small",           help="Whisper model: tiny/small/medium (default: small)")
+    parser.add_argument("--model",        default="medium",          help="Whisper model: tiny/small/medium (default: medium)")
     parser.add_argument("--frame-size",   default="640x360",         help="Thumbnail dimensions WxH (default: 640x360)")
     args = parser.parse_args()
 
