@@ -149,6 +149,42 @@ def transcribe(audio_path: str, model_name: str = "medium"):
 # ═══════════════════════════════════════════════════════════════════════════════
 # SRT writing
 # ═══════════════════════════════════════════════════════════════════════════════
+DEFAULT_WHISPER_TEMPERATURES = (0.0, 0.2, 0.4, 0.6)
+DEFAULT_WHISPER_PROMPT = (
+    "請使用繁體中文逐字轉寫。內容是爸爸 Ken 和女兒 Amelia 一起玩《隻狼》。"
+    "常見詞：阿梅莉亞、Ken、Sekiro、隻狼、忍者、佛雕師、葦名、弦一郎。"
+    "請保留語氣詞、笑聲、驚呼。"
+)
+
+
+def transcribe(
+    audio_path: str,
+    model_name: str = "medium",
+    *,
+    beam_size: int = 5,
+    best_of: int = 5,
+    temperatures=DEFAULT_WHISPER_TEMPERATURES,
+    condition_on_previous_text: bool = False,
+    initial_prompt: str = DEFAULT_WHISPER_PROMPT,
+):
+    """Run Whisper and return the full result dict with tuned decoding defaults."""
+    print(f"  Loading Whisper '{model_name}' model...")
+    model = whisper.load_model(model_name)
+    print("  Transcribing audio (this may take several minutes)...")
+    result = model.transcribe(
+        audio_path,
+        verbose=False,
+        language="zh",
+        task="transcribe",
+        beam_size=beam_size,
+        best_of=best_of,
+        temperature=tuple(temperatures),
+        condition_on_previous_text=condition_on_previous_text,
+        initial_prompt=initial_prompt,
+    )
+    return result
+
+
 def _fmt_time(seconds: float) -> str:
     seconds = max(0.0, seconds)
     h  = int(seconds) // 3600

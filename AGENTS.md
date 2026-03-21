@@ -1,10 +1,12 @@
-# AGENTS.md — Sekiro Gaming Session Highlight Extractor
+# AGENTS.md - Sekiro Gaming Session Highlight Extractor
+
+This file is important to the project. Read it before working, and keep it up to date whenever code changes alter the workflow, defaults, outputs, or verification process.
 
 ## Project Overview
 
-This project automates the post-processing of gaming session recordings made while playing **Sekiro: Shadows Die Twice** with Amelia (Ken's daughter). Each session is a 30–90 minute MP4 screen recording with a facecam overlay showing both player and child reactions.
+This project automates post-processing for gaming session recordings made while playing **Sekiro: Shadows Die Twice** with Amelia (Ken's daughter). Each session is typically a 30-90 minute MP4 screen recording with a facecam overlay showing both player and child reactions.
 
-The goal is to make it easy to produce a curated set of highlight clips from each session — capturing heartwarming, funny, and exciting moments — without manually scrubbing through the full video every time.
+The goal is to make it easy to produce a curated set of highlight clips from each session, capturing heartwarming, funny, and exciting moments without manually scrubbing through the full video every time.
 
 The human will manually cherry-pick and edit the output highlight clips, so **err on the side of too many clips rather than missing a funny moment**.
 
@@ -16,146 +18,172 @@ The project supports two workflows:
 
 ### A. Three-Step Pipeline (recommended)
 
+```text
+Step 1: python preprocess.py data/DayN/DayN.mp4
+           -> DayN.srt + DayN_candidates/ (thumbnails + candidates.md)
+
+Step 2: Claude AI reviews candidates.md + images + optional SRT
+           -> highlights.md
+
+Step 3: python postprocess.py data/DayN/DayN.mp4 data/DayN/highlights.md --srt data/DayN/DayN.srt
+           -> highlight/ (final clips with burned-in subtitles)
 ```
-Step 1: python preprocess.py DayN.mp4
-           ↓ DayN.srt  +  DayN_candidates/ (thumbnails + candidates.md)
 
-Step 2: Claude AI reviews candidates.md + images + SRT
-           ↓ highlights.md  (AI-authored markdown with approved clips)
-
-Step 3: python postprocess.py DayN.mp4 highlights.md --srt DayN.srt
-           ↓ highlight/  (final clips with burned-in subtitles)
-```
-
-**Why three steps?** The AI reviews actual video frame thumbnails alongside subtitle context, making much smarter clip selections than a purely algorithmic approach.
+Why three steps:
+- The AI sees actual thumbnails plus nearby subtitle context.
+- Candidate generation is intentionally generous.
+- The final editorial decision stays in human hands.
 
 ### B. Monolithic Script (legacy, still functional)
 
 ```bash
-python3 highlight_extractor.py DayN.mp4
+python3 highlight_extractor.py data/DayN/DayN.mp4
 ```
 
-Runs the full pipeline in one pass (transcribe → score → cut) without AI review. Useful for a quick automated pass or when AI review is not needed.
+This runs a full automated pass in one script without AI review.
 
 ---
 
-## Project Context & Content Notes
+## Project Context
 
-- **Game:** Sekiro: Shadows Die Twice
-- **Players:** Ken (dad, handles controller) + Amelia (young daughter, co-commentator)
-- **Language:** Mandarin Chinese (Traditional), with occasional English praise
-- **Facecam:** Top-right corner overlay showing both players' reactions throughout
-- **Session naming:** Files are named `Day1.mp4`, `Day2.mp4`, etc.
-- **Recording length:** Typically 30–90 minutes per session
-- **File size:** Approximately 4 GB per session at 1080p 60fps
+- Game: `Sekiro: Shadows Die Twice`
+- Players: Ken and Amelia
+- Language: mostly Mandarin Chinese, sometimes English praise/reactions
+- Facecam: top-right overlay with visible reactions
+- Session naming: `Day1.mp4`, `Day2.mp4`, etc.
+- Recording length: usually 30-90 minutes
+- Typical source size: around 4 GB at 1080p60
 
-### What makes a good highlight (rank in priority)
-1. Amelia's verbal reactions — exclamations, laughter, funny commentary on enemies
-2. Dad and daughter talking to each other — teaching moments, baby-talk story explanations
-3. Dad saying something interesting or non-canonical about the game's lore
-4. Boss fight moments — especially named bosses
-5. Unexpected real-world events during the stream (earthquake, snacks, family members)
-7. Each highlight should be 3–30 seconds; You need to generate 10-30 clips, but the total amount of the clips time should be least then 5 mintues
-8. Slient scene is usually not a highlight
+### What makes a good highlight
+
+Priority order:
+1. Amelia's verbal reactions, laughter, surprise, commentary
+2. Dad and daughter talking to each other
+3. Funny or memorable real-world interruptions
+4. Boss fights and named encounters
+5. Lore talk or funny non-canonical explanations
+
+Clip guidance:
+- Aim for 10-30 clips per session
+- Each clip should usually be 3-30 seconds
+- Total highlight runtime should stay under 5 minutes
+- Avoid leaving long silent stretches inside a clip
 
 ---
 
-## File Structure
+## Current Repository Layout
 
-```
+```text
 highlightExtractor/
-├── highlight_extractor.py    ← monolithic legacy script (still works standalone)
-├── utils.py                  ← shared library (scoring, SRT, clip cutting, etc.)
-├── preprocess.py             ← Step 1: transcribe + candidate extraction
-├── postprocess.py            ← Step 3: parse AI markdown + cut final clips
-├── AGENTS.md                 ← this file
-└── data/
-    └── DayN/
-        ├── DayN.mp4                    ← original session recording (~4 GB)
-        ├── DayN.srt                    ← full video subtitles (generated by preprocess.py)
-        ├── DayN_candidates/            ← generated by preprocess.py
-        │   ├── candidate_01_02m34s.jpg
-        │   ├── candidate_02_05m11s.jpg
-        │   ├── ...
-        │   └── candidates.md           ← AI context file (thumbnails + metadata)
-        ├── highlights.md               ← AI-authored approved clip list (Step 2 output)
-        └── highlight/                  ← final clips (generated by postprocess.py)
-            ├── 01_02m34s_哇塞你好厲害.mp4
-            ├── 01_02m34s_哇塞你好厲害.srt
-            └── ...
+├── AGENTS.md
+├── highlight_extractor.py
+├── postprocess.py
+├── prepare_enroll.py
+├── preprocess.py
+├── utils.py
+├── verify_subtitles.py
+├── data/
+├── tests/
+└── verification/
 ```
+
+Important notes:
+- `preprocess.py`, `postprocess.py`, and `highlight_extractor.py` are the active pipeline scripts.
+- `utils.py` holds shared transcription, scoring, and clip helpers.
+- `verify_subtitles.py` computes subtitle-quality metrics between a predicted SRT and a ground-truth SRT.
+- `prepare_enroll.py` still exists in the repo, but speaker identification is no longer part of the active pipeline.
+- The active automated test suite currently lives in `tests/test_verify_subtitles.py`.
 
 ---
 
-## Setup & Requirements
+## Setup
 
 ### System Requirements
+
 - Python 3.8+
-- `ffmpeg` installed and on PATH (with `libass` for subtitle burning — usually bundled)
+- `ffmpeg` installed and on `PATH`
+- `libass` available in FFmpeg if subtitle burning is needed
 
 ### Python Dependencies
 
 Install once:
+
 ```bash
 pip install openai-whisper numpy opencc-python-reimplemented --break-system-packages
 ```
 
-> **Note:** `openai-whisper` downloads model weights on first run (~460 MB for `small`, ~1.4 GB for `medium`). No internet required after that.
+Notes:
+- `openai-whisper` downloads model weights on first use.
+- The preprocess pipeline currently defaults to the Whisper `large` model.
 
 ### Whisper Model Tradeoffs
 
-| Model  | Size   | Speed (60 min video) | Accuracy |
-|--------|--------|----------------------|----------|
-| tiny   | 75 MB  | ~5 min               | Basic    |
-| small  | 460 MB | ~20 min              | Good     |
-| medium | 1.4 GB | ~50 min              | Better ✅ |
+| Model | Size | Speed (60 min video) | Accuracy |
+|---|---:|---:|---|
+| tiny | 75 MB | ~5 min | Basic |
+| small | 460 MB | ~20 min | Good |
+| medium | 1.4 GB | ~50 min | Better |
+| large | larger | slowest | Best of the currently used options |
 
-`medium` is the recommended default — best accuracy for Mandarin Chinese and children's voices.
-OOM issues previously observed with `medium` are resolved. Use `small` only if on a memory-constrained machine.
+Practical guidance:
+- `large` is the default for `preprocess.py`
+- `medium` is still useful when runtime matters
+- `small` is the fallback for memory-constrained runs
 
 ---
 
 ## Step 1: preprocess.py
 
-Transcribes the video, scores every second, picks the top N candidate moments, extracts a JPEG thumbnail for each, and writes `candidates.md` for AI review.
+Purpose:
+- Transcribe the full video with Whisper
+- Convert subtitles to Traditional Chinese
+- Score each second of the session
+- Select generous candidate highlight timestamps
+- Extract thumbnails
+- Write `candidates.md` for AI review
 
-### Usage
+### Current CLI
+
 ```bash
 python preprocess.py <video.mp4> [options]
 
-  --candidates N     Number of candidate moments to extract   (default: 1000)
-  --min-gap N        Min seconds between candidates           (default: 15)
-  --model NAME       Whisper model: tiny / small / medium     (default: medium)
-  --frame-size WxH   Thumbnail dimensions                     (default: 640x360)
+  --candidates N
+  --min-gap N
+  --model NAME
+  --beam-size N
+  --best-of N
+  --temperatures S
+  --condition-on-previous-text
+  --no-condition-on-previous-text
+  --initial-prompt TEXT
+  --frame-size WxH
 ```
 
-### Examples
-```bash
-# Standard run (medium model, 1000 candidates)
-python preprocess.py data/Day5/Day5.mp4
+Current defaults:
+- `--model large`
+- `--beam-size 5`
+- `--best-of 5`
+- `--temperatures 0.0,0.2,0.4,0.6`
+- `--no-condition-on-previous-text`
+- `--frame-size 640x360`
 
-# Fewer candidates, faster
-python preprocess.py data/Day5/Day5.mp4 --candidates 50 --model tiny
+### Current Output
 
-# Faster run with small model
-python preprocess.py data/Day5/Day5.mp4 --model small
-```
-
-### Output
-- `Day5.srt` — full transcription (Traditional Chinese, opencc converted)
-- `Day5_candidates/candidate_NNN_MMmSSs.jpg` — 640×360 thumbnail per candidate
-- `Day5_candidates/candidates.md` — structured metadata for AI review
+For input `data/Day5/Day5.mp4`, the script writes:
+- `data/Day5/Day5.srt`
+- `data/Day5/Day5_candidates/candidate_*.jpg`
+- `data/Day5/Day5_candidates/candidates.md`
 
 ---
 
-## Step 2: AI Review (Claude)
+## Step 2: AI Review
 
-Feed Claude the following:
-1. `DayN_candidates/candidates.md` — metadata with image refs, scores, dialogue
-2. All `candidate_NN_*.jpg` images in that folder
-3. (Optional) `DayN.srt` for full transcription context
+Give Claude:
+1. `DayN_candidates/candidates.md`
+2. All candidate JPEGs in that folder
+3. Optionally, `DayN.srt`
 
-Claude will output a markdown file (`highlights.md`) in this **exact format**:
+Expected output format:
 
 ```markdown
 ## highlight_01
@@ -163,138 +191,170 @@ Claude will output a markdown file (`highlights.md`) in this **exact format**:
 * end: 02:58
 * reason: Amelia shouts and laughs at the boss explosion
 * confidence: 0.95
-
-## highlight_02
-* start: 08:11
-* end: 08:45
-* reason: Dad gives non-canonical story explanation, Amelia responds
-* confidence: 0.87
 ```
 
-**Parsing rules `postprocess.py` relies on:**
-- Header: `## highlight_N` (N = any number of digits, case-insensitive)
-- `start:` / `end:` values: `MM:SS` or `HH:MM:SS`
-- `reason:`: free text, single line
-- `confidence:`: float in `[0.0, 1.0]`
-- Blocks missing `start` or `end` are skipped with a warning
+`postprocess.py` expects:
+- Header: `## highlight_N`
+- `start` and `end`: `MM:SS` or `HH:MM:SS`
+- `reason`: single-line text
+- `confidence`: float in `[0.0, 1.0]`
 
-The AI **may freely adjust start/end times** — the candidate timestamp is just the peak moment detected by the algorithm; the final clip window is up to the AI's judgment.
+Blocks missing `start` or `end` are skipped.
 
 ---
 
 ## Step 3: postprocess.py
 
-Parses the AI-authored `highlights.md` and cuts the approved clips from the source video.
+Purpose:
+- Parse the AI-authored markdown
+- Cut approved clips from the source video
+- Optionally burn in subtitles
 
-### Usage
+### Current CLI
+
 ```bash
 python postprocess.py <video.mp4> <highlights.md> [options]
 
-  --srt PATH           Full video SRT for subtitle burning (optional)
-  --min-confidence F   Skip highlights below this confidence  (default: 0.0)
-  --no-burn            Cut clips without burning subtitles
-  --out-dir PATH       Output directory                       (default: highlight/ next to video)
-  --min-dur N          Minimum clip duration in seconds       (default: 10)
-  --max-dur N          Maximum clip duration in seconds       (default: 60)
+  --srt PATH
+  --min-confidence F
+  --no-burn
+  --out-dir PATH
+  --min-dur N
+  --max-dur N
 ```
 
-### Examples
-```bash
-# Standard run with subtitle burning
-python postprocess.py data/Day5/Day5.mp4 data/Day5/highlights.md --srt data/Day5/Day5.srt
-
-# Only high-confidence clips
-python postprocess.py data/Day5/Day5.mp4 data/Day5/highlights.md --srt data/Day5/Day5.srt --min-confidence 0.8
-
-# No subtitle burning (faster)
-python postprocess.py data/Day5/Day5.mp4 data/Day5/highlights.md --no-burn
-```
-
-### Output
-Clips in `highlight/` named `{NN}_{MMm}{SSs}_{reason_slug}.mp4` + companion `.srt` files.
+Current defaults:
+- `--min-confidence 0.0`
+- subtitles burned in unless `--no-burn` is used
+- output goes to `highlight/` beside the source video
 
 ---
 
 ## Legacy: highlight_extractor.py
 
-The original monolithic script. Still fully functional — useful for quick automated runs without AI review.
+This script still exists and still works as a one-pass automatic pipeline.
+
+Current CLI:
 
 ```bash
 python3 highlight_extractor.py <video.mp4> [options]
 
-  --clips N        Number of highlight clips (default: unlimited)
-  --min-gap N      Min seconds between clip centers            (default: 15)
-  --min-dur N      Min clip duration in seconds                (default: 10)
-  --max-dur N      Max clip duration in seconds                (default: 60)
-  --model NAME     Whisper model: tiny / small / medium        (default: medium)
-  --no-burn        Skip subtitle burning
+  --clips N
+  --min-gap N
+  --min-dur N
+  --max-dur N
+  --model NAME
+  --no-burn
 ```
+
+Current default model for the legacy script:
+- `medium`
 
 ---
 
-## Highlight Scoring System
+## Scoring System
 
-Used by both `preprocess.py` (candidate selection) and `highlight_extractor.py` (direct cut):
+Used by both `preprocess.py` and `highlight_extractor.py`:
 
+```text
+combined_score = 0.45 * audio_score + 0.55 * subtitle_score
 ```
-combined_score = 0.45 × audio_score + 0.55 × subtitle_score
+
+### Audio Score
+
+- 1-second RMS windows
+- Compared against a 60-second rolling median baseline
+- Louder-than-local-baseline moments score higher
+
+### Subtitle Score
+
+- Keyword weighting using `REACTION_KEYWORDS` in `utils.py`
+- Dialogue density bonus
+- `MUST_INCLUDE_KEYWORDS` force maximum score
+
+If scoring behavior changes, update this file and the verification expectations.
+
+---
+
+## Verification For preprocess.py
+
+Any change that touches `preprocess.py` must run the verification flow below before it is considered verified.
+
+The goal is not only to confirm that the script still runs, but also to make sure subtitle quality stays reasonably close to the current baseline.
+
+### Required verification workflow
+
+```bash
+# 1. Keep the test suite green first
+python -m unittest discover -s tests -p "test_*.py"
+
+# 2. Build or refresh the standard verification clip
+ffmpeg -y -ss 00:00:00 -i data/Day1/Day1.mp4 -t 00:10:00 -c:v libx264 -preset veryfast -crf 23 -c:a aac verification/verification.mp4
+
+# 3. Run the real preprocess pipeline on that clip
+#    Use preprocess.py defaults unless testing a specific non-default flag
+python preprocess.py verification/verification.mp4 --candidates 5
+
+# 4. Compare the generated subtitles to ground truth
+python verify_subtitles.py --pred verification/verification.srt --gt verification/groundtrue.srt
 ```
 
-### Audio Score (RMS excitement ratio)
-- Computes RMS amplitude in 1-second windows
-- Compares each window against a 60-second rolling median baseline
-- High ratio = significantly louder than surrounding audio = excitement
+### Expected verification outputs
 
-### Subtitle Score (keyword + density)
-- Scans each subtitle segment for **Traditional Chinese reaction keywords**
-- Each keyword has a weight (see `REACTION_KEYWORDS` in `utils.py`)
-- Adds a **dialogue density bonus** — rapid back-and-forth scores higher
-- `MUST_INCLUDE_KEYWORDS` are forced to maximum score regardless of audio
+The run should create:
+- `verification/verification.srt`
+- `verification/verification_candidates/candidates.md`
+- candidate JPEG thumbnails under `verification/verification_candidates/`
 
-### Keyword Weight Reference
+The run should complete without crashing, and the generated `.srt` should contain real subtitle entries with timestamps.
 
-| Category | Keywords | Weight |
-|----------|----------|--------|
-| Must-include (always forced) | 地震, 爆米花, 擦桌子, 哇塞, 你好厲害, 太厲害 | forced |
-| Strong exclamation | 哇塞, 哎呀, 哈哈, 嘻嘻 | 4–5 |
-| Reaction / praise | 你好厲害, 好聰明, 太棒了 | 4–5 |
-| Discovery | 打雷, 下雪, 快看 | 3–4 |
-| Common exclamation | 哇, 啊, 诶, 怕怕 | 2–3 |
-| Character names | 阿嬤, 哥哥, 格格, 叔叔 | 1–2 |
+### Current baseline
 
-To tune criteria, edit `REACTION_KEYWORDS` and `MUST_INCLUDE_KEYWORDS` in **`utils.py`** (affects all scripts).
+Baseline pair:
+- Predicted: `verification/verification.srt`
+- Ground truth: `verification/groundtrue.srt`
+
+Current baseline metrics:
+- Pred blocks: `157`
+- GT blocks: `206`
+- Global CER: `0.3920`
+- Matched pairs: `104`
+- Start error: mean `908.7 ms`, median `318.0 ms`
+- End error: mean `384.6 ms`, median `280.0 ms`
+- Match F1: `P=0.2803 R=0.2136 F1=0.2424`
+- Correct matches: `44`
+
+### Regression guardrails
+
+Treat the change as a regression and call it out clearly if any of these happen relative to baseline:
+- `CER` increases by more than `0.03`
+- `Match F1` drops by more than `0.03`
+- Mean start error increases by more than `250 ms`
+- Mean end error increases by more than `150 ms`
+
+Small movement is acceptable, but material regressions must be reported explicitly in the final response.
+
+If a change intentionally trades one metric for another, say so clearly and include both the old and new values.
 
 ---
 
 ## Known Limitations
 
-- **Whisper accuracy with children's voices:** Amelia's voice is occasionally mis-transcribed when she speaks quickly or over game audio. Good enough for highlight detection; may need light editing for publication.
-- **Subtitle burn requires libass:** If `ffmpeg` is built without `libass`, burning fails gracefully — the raw clip is saved and a warning is printed. The `.srt` is always saved.
-- **Language fixed to Chinese:** The script forces `language="zh"`. For sessions with more English, switch to `language=None` for auto-detection (edit `utils.py → transcribe()`).
-- **Fast-seek thumbnails:** `preprocess.py` uses FFmpeg fast-seek (`-ss` before `-i`) for thumbnail extraction, so the frame may be up to a few seconds off from the exact peak timestamp. This is intentional — keyframe accuracy is sufficient for AI review thumbnails.
+- Whisper can still struggle with overlapping speech, child speech, and heavy game audio.
+- Subtitle burning depends on FFmpeg `libass`.
+- The pipeline is currently forced to Chinese transcription with `language="zh"`.
+- Thumbnail extraction uses fast seek, so thumbnails may be a little off from the exact subtitle peak.
 
 ---
 
-## Workflow for Each New Session
+## Working Norm
 
-### Three-step pipeline (recommended)
-```bash
+Whenever code changes alter:
+- CLI flags
+- defaults
+- generated files
+- verification files
+- baseline metrics
+- workflow steps
 
-# 1. Pre-process (~20 min with small model)
-python preprocess.py data/DayN/DayN.mp4
-
-# 2. AI review — give Claude:
-#    - data/DayN/DayN_candidates/candidates.md
-#    - all candidate_*.jpg images
-#    - data/DayN/DayN.srt  (optional, for full context)
-#    Save Claude's output as data/DayN/highlights.md
-
-# 3. Post-process (cuts final clips, ~5 min)
-python postprocess.py data/DayN/DayN.mp4 data/DayN/highlights.md --srt data/DayN/DayN.srt
-
-```
-
-### Quick automated pass (no AI review)
-```bash
-python3 highlight_extractor.py data/DayN/DayN.mp4
-```
+update this file in the same task so it stays aligned with the actual project.

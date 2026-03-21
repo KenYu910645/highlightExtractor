@@ -168,6 +168,29 @@ def transcribe(audio_path: str, model_name: str = "medium"):
 # ═══════════════════════════════════════════════════════════════════════════════
 # STEP 3 — SRT writing (full video + per-clip with shifted timestamps)
 # ═══════════════════════════════════════════════════════════════════════════════
+def transcribe(audio_path: str, model_name: str = "medium"):
+    """Run Whisper and return the full result dict with tuned decoding defaults."""
+    print(f"  Loading Whisper '{model_name}' model...")
+    model = whisper.load_model(model_name)
+    print("  Transcribing audio (this may take several minutes)...")
+    result = model.transcribe(
+        audio_path,
+        verbose=False,
+        language="zh",
+        task="transcribe",
+        beam_size=5,
+        best_of=5,
+        temperature=(0.0, 0.2, 0.4, 0.6),
+        condition_on_previous_text=False,
+        initial_prompt=(
+            "請使用繁體中文逐字轉寫。內容是爸爸 Ken 和女兒 Amelia 一起玩《隻狼》。"
+            "常見詞：阿梅莉亞、Ken、Sekiro、隻狼、忍者、佛雕師、葦名、弦一郎。"
+            "請保留語氣詞、笑聲、驚呼。"
+        ),
+    )
+    return result
+
+
 def _fmt_time(seconds: float) -> str:
     seconds = max(0.0, seconds)
     h  = int(seconds) // 3600
@@ -477,7 +500,7 @@ def main():
     parser.add_argument("--min-gap",       type=int,   default=15,      help="Min seconds between clips (default: 15)")
     parser.add_argument("--min-dur",       type=int,   default=10,      help="Min clip duration in seconds (default: 10)")
     parser.add_argument("--max-dur",       type=int,   default=60,      help="Max clip duration in seconds (default: 60)")
-    parser.add_argument("--model",         default="medium",            help="Whisper model: tiny/small/medium (default: medium)")
+    parser.add_argument("--model",         default="medium",            help="Whisper model name, e.g. small/medium/large (default: medium)")
     parser.add_argument("--no-burn",       action="store_true",         help="Skip subtitle burning into clips")
     args = parser.parse_args()
 
