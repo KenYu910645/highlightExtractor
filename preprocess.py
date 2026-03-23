@@ -31,6 +31,7 @@ Output (next to the video file):
 """
 
 import argparse
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -38,9 +39,14 @@ from pathlib import Path
 import numpy as np
 import opencc
 
+from amelia_event import (
+    AmeliaEventDetector,
+    DEFAULT_PROTOTYPE_PATH,
+)
 from utils import (
     DEFAULT_WHISPER_PROMPT,
     DEFAULT_WHISPER_TEMPERATURES,
+    combine_highlight_scores,
     compute_audio_scores,
     compute_subtitle_scores,
     extract_audio,
@@ -158,6 +164,7 @@ def write_candidates_md(candidates: list, out_path: str, video_name: str, srt_pa
                 f"- **Timestamp:** {ts} ({candidate['center_sec']:.0f} seconds)",
                 f"- **Composite score:** {candidate['score']:.3f}",
                 f"- **Audio excitement:** {candidate['audio_rms']:.3f}  (0=silent, 1=loudest)",
+                f"- **Amelia event score:** {candidate['amelia_score']:.3f}  (0=unlikely, 1=strong match)",
                 f"- **Nearby dialogue:** {candidate['subtitle_text']}",
                 "",
             ]
@@ -218,6 +225,22 @@ def main():
         default="640x360",
         help="Thumbnail dimensions WxH (default: 640x360)",
     )
+    parser.add_argument(
+        "--amelia-prototypes",
+        default=DEFAULT_PROTOTYPE_PATH,
+        help=f"Path to Amelia prototype JSON artifact (default: {DEFAULT_PROTOTYPE_PATH})",
+    )
+    parser.add_argument(
+        "--disable-amelia-detector",
+        action="store_true",
+        help="Disable Amelia event scoring even if a prototype artifact is present",
+    )
+    parser.add_argument(
+        "--amelia-weight",
+        type=float,
+        default=0.40,
+        help="Amelia detector contribution when enabled (default: 0.40)",
+    )
     parser.set_defaults(condition_on_previous_text=False)
     args = parser.parse_args()
 
@@ -233,6 +256,8 @@ def main():
     candidates_dir = out_dir / f"{stem}_candidates"
     candidates_dir.mkdir(exist_ok=True)
     tmp_audio = str(out_dir / f"_tmp_{stem}_audio.wav")
+    amelia_json = out_dir / f"{stem}_amelia_events.json"
+    amelia_prototypes = Path(args.amelia_prototypes).resolve()
 
     print(f"\n{'=' * 60}")
     print("  Pre-processor")
@@ -245,6 +270,8 @@ def main():
         f"prev_text={'On' if args.condition_on_previous_text else 'Off'}"
     )
     print(f"  Thumbnails : {frame_w}x{frame_h}")
+    detector_status = "Off" if args.disable_amelia_detector else ("Ready" if amelia_prototypes.exists() else "Missing")
+    print(f"  Amelia     : {detector_status}")
     print(f"{'=' * 60}\n")
 
     print("[1/5] Extracting audio...")
@@ -278,12 +305,29 @@ def main():
     print("[4/5] Scoring and selecting candidates...")
     audio_scores = compute_audio_scores(tmp_audio, duration)
     subtitle_scores, must_include = compute_subtitle_scores(segments, duration)
+    amelia_scores = np.zeros(min(len(audio_scores), len(subtitle_scores)), dtype=np.float32)
+    amelia_result = None
 
-    length = min(len(audio_scores), len(subtitle_scores))
-    _combined_scores = np.convolve(
-        0.45 * norm(audio_scores[:length]) + 0.55 * norm(subtitle_scores[:length]),
-        np.ones(5) / 5,
-        mode="same",
+    if not args.disable_amelia_detector and amelia_prototypes.exists():
+        print("  Loading Amelia prototype detector...")
+        detector = AmeliaEventDetector(amelia_prototypes)
+        amelia_result = detector.score_audio(tmp_audio, duration=duration)
+        amelia_scores = np.asarray(amelia_result["timeline_scores"], dtype=np.float32)
+        amelia_json.write_text(json.dumps(amelia_result, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(f"  Amelia spans detected: {len(amelia_result['spans'])}")
+    elif not args.disable_amelia_detector:
+        print(f"  Amelia prototype artifact not found at {amelia_prototypes}; using legacy scoring only.")
+
+    weights = (
+        0.25,
+        0.35,
+        args.amelia_weight,
+    ) if amelia_result is not None else (0.45, 0.55, 0.0)
+    _combined_scores = combine_highlight_scores(
+        audio_scores,
+        subtitle_scores,
+        amelia_scores=amelia_scores if amelia_result is not None else None,
+        weights=weights,
     )
     candidates_raw = pick_highlights(
         audio_scores,
@@ -291,6 +335,8 @@ def main():
         must_include,
         n_clips=args.candidates,
         min_gap=args.min_gap,
+        amelia_scores=amelia_scores if amelia_result is not None else None,
+        weights=weights,
     )
     print(f"  {len(candidates_raw)} candidates selected ({len(must_include)} must-include forced)\n")
 
@@ -319,6 +365,7 @@ def main():
             "ss": ss,
             "score": score,
             "audio_rms": compute_window_rms(audio_scores, center),
+            "amelia_score": float(amelia_scores[min(int(center), len(amelia_scores) - 1)]) if len(amelia_scores) else 0.0,
             "subtitle_text": gather_nearby_subtitles(segments, float(center)),
             "image_filename": img_name,
         }
@@ -333,6 +380,8 @@ def main():
     print(f"  SRT        : {Path(full_srt).name}")
     print(f"  Candidates : {candidates_dir.name}/  ({len(candidates)} thumbnails)")
     print(f"  AI context : {candidates_dir.name}/candidates.md")
+    if amelia_result is not None:
+        print(f"  Amelia     : {amelia_json.name}")
     print(f"{'=' * 60}\n")
 
 

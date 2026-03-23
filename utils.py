@@ -281,22 +281,51 @@ def compute_subtitle_scores(segments, duration: float):
     return scores, must_include
 
 
+def combine_highlight_scores(
+    audio_scores: np.ndarray,
+    subtitle_scores: np.ndarray,
+    amelia_scores: np.ndarray | None = None,
+    *,
+    weights: tuple[float, float, float] = (0.45, 0.55, 0.0),
+) -> np.ndarray:
+    """Combine normalized score streams into a single smoothed highlight score."""
+    if amelia_scores is None:
+        length = min(len(audio_scores), len(subtitle_scores))
+    else:
+        length = min(len(audio_scores), len(subtitle_scores), len(amelia_scores))
+
+    if length == 0:
+        return np.zeros(0, dtype=np.float32)
+
+    audio_weight, subtitle_weight, amelia_weight = weights
+    combined = audio_weight * norm(audio_scores[:length]) + subtitle_weight * norm(subtitle_scores[:length])
+    if amelia_scores is not None and amelia_weight > 0:
+        combined += amelia_weight * norm(amelia_scores[:length])
+    kernel_size = min(5, length)
+    kernel = np.ones(kernel_size, dtype=np.float32) / kernel_size
+    return np.convolve(combined, kernel, mode="same")
+
+
 def pick_highlights(audio_scores: np.ndarray,
                     subtitle_scores: np.ndarray,
                     must_include: list,
                     n_clips=25,
-                    min_gap: int = 15) -> list:
+                    min_gap: int = 15,
+                    amelia_scores: np.ndarray | None = None,
+                    weights: tuple[float, float, float] = (0.45, 0.55, 0.0)) -> list:
     """
     Combine audio + subtitle signals and pick top N non-overlapping highlights.
     Must-include keywords always get a clip regardless of score rank.
     Returns a list of (center_second, combined_score) sorted by timestamp.
     """
     import math
-    length = min(len(audio_scores), len(subtitle_scores))
-
-    combined = (0.45 * norm(audio_scores[:length]) +
-                0.55 * norm(subtitle_scores[:length]))
-    combined = np.convolve(combined, np.ones(5) / 5, mode="same")
+    combined = combine_highlight_scores(
+        audio_scores,
+        subtitle_scores,
+        amelia_scores=amelia_scores,
+        weights=weights,
+    )
+    length = len(combined)
 
     for t in must_include:
         if t < length:
