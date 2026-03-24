@@ -25,6 +25,7 @@ Step 0: python build_amelia_prototypes.py
 Step 1: python preprocess.py data/DayN/DayN.mp4
            -> DayN.srt + DayN_candidates/ (thumbnails + candidates.md)
            -> DayN_amelia_events.json (if prototypes are available)
+           -> DayN_amelia_ranked_review.mp4 + DayN_amelia_ranked_review_windows.json
 
 Step 2: Claude AI reviews candidates.md + images + optional SRT
            -> highlights.md
@@ -173,6 +174,9 @@ python preprocess.py <video.mp4> [options]
   --amelia-prototypes PATH
   --disable-amelia-detector
   --amelia-weight F
+  --disable-amelia-review-video
+  --amelia-review-target-fraction F
+  --amelia-review-max-clip-sec N
 ```
 
 Current defaults:
@@ -185,6 +189,9 @@ Current defaults:
 - `--amelia-prototypes data/enroll/amelia_event_prototypes.json`
 - `--amelia-weight 0.40`
 - Amelia detector auto-runs when the prototype artifact exists unless `--disable-amelia-detector` is used
+- Amelia review video auto-runs when detector scoring succeeds unless `--disable-amelia-review-video` is used
+- `--amelia-review-target-fraction 0.10`
+- `--amelia-review-max-clip-sec 5.0`
 
 ### Current Output
 
@@ -193,6 +200,8 @@ For input `data/Day5/Day5.mp4`, the script writes:
 - `data/Day5/Day5_candidates/candidate_*.jpg`
 - `data/Day5/Day5_candidates/candidates.md`
 - `data/Day5/Day5_amelia_events.json` when Amelia prototype scoring is enabled
+- `data/Day5/Day5_amelia_ranked_review.mp4` when Amelia review video generation is enabled
+- `data/Day5/Day5_amelia_ranked_review_windows.json` with the selected review clips
 
 ### Amelia prototype setup
 
@@ -233,6 +242,7 @@ Behavior:
 - reorders the final clips by time so the earliest scene appears first
 - concatenates all kept clips into one review video
 - intermediate concat files and per-clip folders are treated as temporary files and are not kept
+- `preprocess.py` calls this automatically after detector scoring by default
 
 ---
 

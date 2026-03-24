@@ -38,41 +38,24 @@ def probe_duration(video_path: Path) -> float:
     return float(result.stdout.strip())
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Build a concatenated Amelia review video from detector windows."
-    )
-    parser.add_argument("video", help="Source video path")
-    parser.add_argument("detector_json", help="Path to *_amelia_events.json")
-    parser.add_argument(
-        "--target-fraction",
-        type=float,
-        default=0.10,
-        help="Target fraction of source runtime to keep (default: 0.10)",
-    )
-    parser.add_argument(
-        "--max-clip-sec",
-        type=float,
-        default=5.0,
-        help="Maximum length for each output clip (default: 5.0)",
-    )
-    parser.add_argument(
-        "--out",
-        default=None,
-        help="Output review video path (default: <video dir>/<stem>_amelia_ranked_review.mp4)",
-    )
-    args = parser.parse_args()
-
-    video_path = Path(args.video).resolve()
-    detector_path = Path(args.detector_json).resolve()
+def build_review_video(
+    video_path: str | Path,
+    detector_json: str | Path,
+    *,
+    target_fraction: float = 0.10,
+    max_clip_sec: float = 5.0,
+    out_path: str | Path | None = None,
+) -> dict:
+    video_path = Path(video_path).resolve()
+    detector_path = Path(detector_json).resolve()
     payload = json.loads(detector_path.read_text(encoding="utf-8"))
     windows = payload.get("windows", [])
     video_duration = probe_duration(video_path)
-    target_duration_sec = video_duration * args.target_fraction
+    target_duration_sec = video_duration * target_fraction
     selected, dynamic_threshold = select_top_windows_for_duration(
         windows,
         target_duration_sec=target_duration_sec,
-        max_clip_sec=args.max_clip_sec,
+        max_clip_sec=max_clip_sec,
     )
 
     if not selected:
@@ -81,8 +64,8 @@ def main() -> None:
         )
 
     out_path = (
-        Path(args.out).resolve()
-        if args.out
+        Path(out_path).resolve()
+        if out_path
         else video_path.parent / f"{video_path.stem}_amelia_ranked_review.mp4"
     )
     manifest_path = out_path.parent / f"{out_path.stem}_windows.json"
@@ -167,8 +150,8 @@ def main() -> None:
         json.dumps(
             {
                 "dynamic_threshold": dynamic_threshold,
-                "max_clip_sec": args.max_clip_sec,
-                "target_fraction": args.target_fraction,
+                "max_clip_sec": max_clip_sec,
+                "target_fraction": target_fraction,
                 "target_duration_sec": round(target_duration_sec, 3),
                 "selected_duration_sec": round(sum(item["duration_sec"] for item in manifest), 3),
                 "clip_count": len(manifest),
@@ -180,11 +163,53 @@ def main() -> None:
         encoding="utf-8",
     )
 
-    print(f"Review video : {out_path}")
-    print(f"Clip count   : {len(manifest)}")
-    print(f"Target secs  : {target_duration_sec:.3f}")
-    print(f"Threshold    : {dynamic_threshold:g}")
-    print(f"Manifest     : {manifest_path}")
+    return {
+        "review_video": str(out_path),
+        "manifest": str(manifest_path),
+        "clip_count": len(manifest),
+        "target_duration_sec": round(target_duration_sec, 3),
+        "dynamic_threshold": dynamic_threshold,
+    }
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Build a concatenated Amelia review video from detector windows."
+    )
+    parser.add_argument("video", help="Source video path")
+    parser.add_argument("detector_json", help="Path to *_amelia_events.json")
+    parser.add_argument(
+        "--target-fraction",
+        type=float,
+        default=0.10,
+        help="Target fraction of source runtime to keep (default: 0.10)",
+    )
+    parser.add_argument(
+        "--max-clip-sec",
+        type=float,
+        default=5.0,
+        help="Maximum length for each output clip (default: 5.0)",
+    )
+    parser.add_argument(
+        "--out",
+        default=None,
+        help="Output review video path (default: <video dir>/<stem>_amelia_ranked_review.mp4)",
+    )
+    args = parser.parse_args()
+
+    result = build_review_video(
+        args.video,
+        args.detector_json,
+        target_fraction=args.target_fraction,
+        max_clip_sec=args.max_clip_sec,
+        out_path=args.out,
+    )
+
+    print(f"Review video : {result['review_video']}")
+    print(f"Clip count   : {result['clip_count']}")
+    print(f"Target secs  : {result['target_duration_sec']:.3f}")
+    print(f"Threshold    : {result['dynamic_threshold']:g}")
+    print(f"Manifest     : {result['manifest']}")
 
 
 if __name__ == "__main__":

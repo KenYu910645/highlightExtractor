@@ -43,6 +43,7 @@ from amelia_event import (
     AmeliaEventDetector,
     DEFAULT_PROTOTYPE_PATH,
 )
+from build_amelia_review_video import build_review_video
 from utils import (
     DEFAULT_WHISPER_PROMPT,
     DEFAULT_WHISPER_TEMPERATURES,
@@ -241,6 +242,23 @@ def main():
         default=0.40,
         help="Amelia detector contribution when enabled (default: 0.40)",
     )
+    parser.add_argument(
+        "--disable-amelia-review-video",
+        action="store_true",
+        help="Do not render the Amelia review video after detector scoring",
+    )
+    parser.add_argument(
+        "--amelia-review-target-fraction",
+        type=float,
+        default=0.10,
+        help="Target fraction of source runtime for Amelia review video (default: 0.10)",
+    )
+    parser.add_argument(
+        "--amelia-review-max-clip-sec",
+        type=float,
+        default=5.0,
+        help="Maximum clip length for Amelia review video (default: 5.0)",
+    )
     parser.set_defaults(condition_on_previous_text=False)
     args = parser.parse_args()
 
@@ -257,6 +275,8 @@ def main():
     candidates_dir.mkdir(exist_ok=True)
     tmp_audio = str(out_dir / f"_tmp_{stem}_audio.wav")
     amelia_json = out_dir / f"{stem}_amelia_events.json"
+    amelia_review_video = out_dir / f"{stem}_amelia_ranked_review.mp4"
+    amelia_review_manifest = out_dir / f"{stem}_amelia_ranked_review_windows.json"
     amelia_prototypes = Path(args.amelia_prototypes).resolve()
 
     print(f"\n{'=' * 60}")
@@ -375,6 +395,20 @@ def main():
     candidates_md = str(candidates_dir / "candidates.md")
     write_candidates_md(candidates, candidates_md, video_path.name, full_srt)
 
+    if amelia_result is not None and not args.disable_amelia_review_video:
+        print("\n[6/6] Building Amelia review video...")
+        review_result = build_review_video(
+            video_path,
+            amelia_json,
+            target_fraction=args.amelia_review_target_fraction,
+            max_clip_sec=args.amelia_review_max_clip_sec,
+            out_path=amelia_review_video,
+        )
+        print(
+            f"  Amelia review: {Path(review_result['review_video']).name}  "
+            f"({review_result['clip_count']} clips, threshold={review_result['dynamic_threshold']:.3f})"
+        )
+
     print(f"\n{'=' * 60}")
     print("  Done!")
     print(f"  SRT        : {Path(full_srt).name}")
@@ -382,6 +416,9 @@ def main():
     print(f"  AI context : {candidates_dir.name}/candidates.md")
     if amelia_result is not None:
         print(f"  Amelia     : {amelia_json.name}")
+        if not args.disable_amelia_review_video:
+            print(f"  Review     : {amelia_review_video.name}")
+            print(f"  Review map : {amelia_review_manifest.name}")
     print(f"{'=' * 60}\n")
 
 
